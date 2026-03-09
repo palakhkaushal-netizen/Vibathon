@@ -1,0 +1,412 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Sniplink — Link Analytics Shortener</title>
+  <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet"/>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --bg: #0b0c0f; --surface: #13151a; --surface2: #1c1f27; --border: #2a2d36;
+      --accent: #c6f135; --text: #e8eaf0; --muted: #6b7280; --danger: #ff4f4f;
+      --font-head: 'Syne', sans-serif; --font-mono: 'JetBrains Mono', monospace;
+    }
+    body { background: var(--bg); color: var(--text); font-family: var(--font-head); min-height: 100vh; overflow-x: hidden; }
+    body::before {
+      content: ''; position: fixed; inset: 0;
+      background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.03'/%3E%3C/svg%3E");
+      pointer-events: none; z-index: 0; opacity: 0.4;
+    }
+    body::after {
+      content: ''; position: fixed; top: -200px; left: 50%; transform: translateX(-50%);
+      width: 700px; height: 400px;
+      background: radial-gradient(ellipse, rgba(198,241,53,0.07) 0%, transparent 70%);
+      pointer-events: none; z-index: 0;
+    }
+    .container { max-width: 880px; margin: 0 auto; padding: 0 24px; position: relative; z-index: 1; }
+    header { padding: 48px 0 0; text-align: center; }
+    .logo { display: inline-flex; align-items: center; gap: 10px; margin-bottom: 12px; }
+    .logo-icon { width: 36px; height: 36px; background: var(--accent); border-radius: 8px; display: flex; align-items: center; justify-content: center; }
+    .logo-icon svg { width: 20px; height: 20px; }
+    .logo-text { font-size: 24px; font-weight: 800; letter-spacing: -0.5px; color: var(--accent); }
+    h1 { font-size: clamp(36px, 6vw, 56px); font-weight: 800; letter-spacing: -2px; line-height: 1.05; margin-bottom: 12px; }
+    h1 span { color: var(--accent); }
+    .subtitle { font-family: var(--font-mono); font-size: 14px; color: var(--muted); margin-bottom: 48px; }
+
+    /* SHORTEN CARD */
+    .shorten-card { background: var(--surface); border: 1px solid var(--border); border-radius: 16px; padding: 28px; margin-bottom: 28px; position: relative; overflow: hidden; }
+    .shorten-card::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 2px; background: linear-gradient(90deg, transparent, var(--accent), transparent); }
+    .input-row { display: flex; gap: 12px; margin-bottom: 14px; }
+    .url-input { flex: 1; background: var(--surface2); border: 1px solid var(--border); color: var(--text); font-family: var(--font-mono); font-size: 14px; padding: 14px 18px; border-radius: 10px; outline: none; transition: border-color .2s, box-shadow .2s; }
+    .url-input::placeholder { color: var(--muted); }
+    .url-input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(198,241,53,.1); }
+    .url-input.error { border-color: var(--danger); box-shadow: 0 0 0 3px rgba(255,79,79,.1); }
+
+    /* ALIAS */
+    .alias-row { display: flex; align-items: center; gap: 0; margin-bottom: 16px; flex-wrap: wrap; gap: 10px; }
+    .alias-prefix { font-family: var(--font-mono); font-size: 13px; color: var(--muted); white-space: nowrap; background: var(--surface2); border: 1px solid var(--border); border-radius: 8px 0 0 8px; padding: 10px 14px; border-right: none; }
+    .alias-input { background: var(--surface2); border: 1px solid var(--border); border-left: none; color: var(--text); font-family: var(--font-mono); font-size: 14px; padding: 10px 14px; border-radius: 0 8px 8px 0; outline: none; width: 200px; transition: border-color .2s; }
+    .alias-input::placeholder { color: var(--muted); }
+    .alias-input:focus { border-color: var(--accent); }
+    .alias-input.error { border-color: var(--danger); }
+    .alias-hint { font-family: var(--font-mono); font-size: 11px; color: var(--muted); }
+
+    .btn-shorten { background: var(--accent); color: #0b0c0f; border: none; padding: 14px 28px; border-radius: 10px; font-family: var(--font-head); font-size: 15px; font-weight: 700; cursor: pointer; white-space: nowrap; transition: transform .15s, opacity .15s; display: flex; align-items: center; gap: 8px; }
+    .btn-shorten:hover { opacity: .88; transform: translateY(-1px); }
+    .btn-shorten:active { transform: scale(.97); }
+
+    .error-msg { font-family: var(--font-mono); font-size: 12px; color: var(--danger); margin-top: 6px; display: none; }
+    .error-msg.visible { display: block; }
+
+    /* RESULT */
+    .result-banner { display: none; margin-top: 20px; background: var(--surface2); border: 1px solid rgba(198,241,53,.25); border-radius: 12px; padding: 18px 20px; gap: 16px; animation: slideIn .3s ease; flex-wrap: wrap; align-items: center; }
+    .result-banner.visible { display: flex; }
+    @keyframes slideIn { from { opacity:0; transform: translateY(-8px); } to { opacity:1; transform: translateY(0); } }
+    .result-info { flex: 1; min-width: 200px; }
+    .result-label { font-family: var(--font-mono); font-size: 12px; color: var(--muted); margin-bottom: 4px; }
+    .result-link { font-family: var(--font-mono); font-size: 14px; color: var(--accent); text-decoration: none; font-weight: 500; }
+    .result-link:hover { text-decoration: underline; }
+    .result-actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+    .btn-copy, .btn-qr-btn { background: transparent; border: 1px solid var(--border); color: var(--text); padding: 8px 16px; border-radius: 8px; font-family: var(--font-head); font-size: 13px; font-weight: 600; cursor: pointer; transition: border-color .2s, background .2s; white-space: nowrap; }
+    .btn-copy:hover, .btn-qr-btn:hover { border-color: var(--accent); background: rgba(198,241,53,.08); }
+    .btn-copy.copied { border-color: var(--accent); color: var(--accent); }
+
+    /* STATS */
+    .stats-bar { display: flex; gap: 16px; margin-bottom: 28px; }
+    .stat-chip { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 14px 20px; flex: 1; text-align: center; }
+    .stat-num { font-size: 28px; font-weight: 800; color: var(--accent); letter-spacing: -1px; line-height: 1; }
+    .stat-lbl { font-family: var(--font-mono); font-size: 11px; color: var(--muted); margin-top: 4px; text-transform: uppercase; letter-spacing: .5px; }
+
+    /* DASHBOARD */
+    .dashboard-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; }
+    .dashboard-title { font-size: 20px; font-weight: 700; letter-spacing: -.5px; }
+    .btn-clear { background: transparent; border: 1px solid var(--border); color: var(--muted); padding: 7px 14px; border-radius: 8px; font-family: var(--font-head); font-size: 12px; cursor: pointer; transition: border-color .2s, color .2s; }
+    .btn-clear:hover { border-color: var(--danger); color: var(--danger); }
+    .links-list { display: flex; flex-direction: column; gap: 10px; }
+
+    .link-card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 18px 20px; animation: slideIn .25s ease; transition: border-color .2s; }
+    .link-card:hover { border-color: rgba(198,241,53,.2); }
+    .link-card-top { display: grid; grid-template-columns: 1fr auto; gap: 12px; align-items: center; }
+    .link-original { font-family: var(--font-mono); font-size: 12px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-bottom: 6px; }
+    .link-short { font-family: var(--font-mono); font-size: 14px; font-weight: 500; color: var(--accent); text-decoration: none; cursor: pointer; }
+    .link-short:hover { text-decoration: underline; }
+    .link-meta { font-family: var(--font-mono); font-size: 11px; color: var(--muted); margin-top: 4px; }
+    .click-badge { display: flex; flex-direction: column; align-items: center; justify-content: center; background: var(--surface2); border: 1px solid var(--border); border-radius: 10px; padding: 12px 18px; min-width: 70px; text-align: center; }
+    .click-count { font-size: 24px; font-weight: 800; color: var(--text); letter-spacing: -1px; line-height: 1; }
+    .click-count.bumped { animation: bump .3s ease; color: var(--accent); }
+    @keyframes bump { 0%{transform:scale(1)} 50%{transform:scale(1.4)} 100%{transform:scale(1)} }
+    .click-label { font-family: var(--font-mono); font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: .5px; margin-top: 3px; }
+
+    .link-card-actions { display: flex; gap: 8px; margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border); flex-wrap: wrap; }
+    .btn-card { background: transparent; border: 1px solid var(--border); color: var(--muted); padding: 6px 12px; border-radius: 7px; font-family: var(--font-mono); font-size: 11px; cursor: pointer; transition: border-color .2s, color .2s, background .2s; }
+    .btn-card:hover { border-color: var(--accent); color: var(--accent); background: rgba(198,241,53,.05); }
+    .btn-card.copied-state { border-color: var(--accent); color: var(--accent); }
+    .btn-del { margin-left: auto; }
+    .btn-del:hover { border-color: var(--danger) !important; color: var(--danger) !important; background: rgba(255,79,79,.05) !important; }
+
+    /* QR MODAL */
+    .modal-backdrop { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.75); z-index: 200; align-items: center; justify-content: center; backdrop-filter: blur(4px); }
+    .modal-backdrop.active { display: flex; }
+    .modal { background: var(--surface); border: 1px solid var(--border); border-radius: 16px; padding: 32px; text-align: center; max-width: 340px; width: 90%; animation: modalIn .25s ease; }
+    @keyframes modalIn { from{opacity:0;transform:scale(.92)} to{opacity:1;transform:scale(1)} }
+    .modal-title { font-size: 18px; font-weight: 700; margin-bottom: 6px; }
+    .modal-url { font-family: var(--font-mono); font-size: 11px; color: var(--muted); margin-bottom: 20px; word-break: break-all; }
+    #qrContainer { display: flex; justify-content: center; margin-bottom: 20px; }
+    #qrContainer canvas, #qrContainer img { border-radius: 8px; background: #fff; padding: 10px; }
+    .modal-actions { display: flex; gap: 10px; justify-content: center; }
+    .btn-download { background: var(--accent); color: #0b0c0f; border: none; padding: 10px 22px; border-radius: 8px; font-family: var(--font-head); font-size: 13px; font-weight: 700; cursor: pointer; transition: opacity .2s; }
+    .btn-download:hover { opacity: .85; }
+    .btn-close-modal { background: transparent; border: 1px solid var(--border); color: var(--text); padding: 10px 18px; border-radius: 8px; font-family: var(--font-head); font-size: 13px; cursor: pointer; }
+    .btn-close-modal:hover { border-color: var(--muted); }
+
+    .empty-state { text-align: center; padding: 64px 0; color: var(--muted); font-family: var(--font-mono); font-size: 14px; display: none; }
+    .empty-state.visible { display: block; }
+    .empty-icon { font-size: 40px; margin-bottom: 12px; }
+
+    #redirect-page { display: none; position: fixed; inset: 0; background: var(--bg); z-index: 100; flex-direction: column; align-items: center; justify-content: center; text-align: center; }
+    #redirect-page.active { display: flex; }
+    .redirect-spinner { width: 48px; height: 48px; border: 3px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin .8s linear infinite; margin-bottom: 24px; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .redirect-title { font-size: 22px; font-weight: 700; margin-bottom: 8px; }
+    .redirect-url { font-family: var(--font-mono); font-size: 13px; color: var(--muted); max-width: 400px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+    footer { text-align: center; padding: 48px 0 32px; font-family: var(--font-mono); font-size: 12px; color: var(--muted); position: relative; z-index: 1; }
+
+    @media (max-width: 600px) {
+      .input-row { flex-direction: column; }
+      .alias-row { flex-wrap: wrap; }
+      .stats-bar { flex-direction: column; gap: 10px; }
+      .link-card-top { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+
+<div id="redirect-page">
+  <div class="redirect-spinner"></div>
+  <div class="redirect-title">Redirecting you…</div>
+  <div class="redirect-url" id="redirect-dest"></div>
+</div>
+
+<!-- QR MODAL -->
+<div class="modal-backdrop" id="qrModal">
+  <div class="modal">
+    <div class="modal-title">⬛ QR Code</div>
+    <div class="modal-url" id="qrModalUrl"></div>
+    <div id="qrContainer"></div>
+    <div class="modal-actions">
+      <button class="btn-download" onclick="downloadQR()">⬇ Download PNG</button>
+      <button class="btn-close-modal" onclick="closeQRModal()">Close</button>
+    </div>
+  </div>
+</div>
+
+<!-- MAIN APP -->
+<div id="main-app">
+  <div class="container">
+    <header>
+      <div class="logo">
+        <div class="logo-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="#0b0c0f" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/>
+            <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>
+          </svg>
+        </div>
+        <span class="logo-text">sniplink</span>
+      </div>
+      <h1>Shorten. Share.<br/><span>Track.</span></h1>
+      <p class="subtitle">// custom alias · qr code · real-time analytics</p>
+    </header>
+
+    <div class="shorten-card">
+      <div class="input-row">
+        <input type="text" class="url-input" id="urlInput"
+          placeholder="https://your-very-long-url.com/goes/here"
+          autocomplete="off" spellcheck="false"/>
+        <button class="btn-shorten" onclick="shortenUrl()">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/>
+          </svg>
+          Shorten
+        </button>
+      </div>
+
+      <div class="alias-row">
+        <span class="alias-prefix">sniplink/#/</span>
+        <input type="text" class="alias-input" id="aliasInput"
+          placeholder="my-custom-alias"
+          autocomplete="off" spellcheck="false"
+          oninput="this.value=this.value.replace(/[^a-zA-Z0-9\-_]/g,'')"/>
+        <span class="alias-hint">optional · letters, numbers, - _</span>
+      </div>
+
+      <div class="error-msg" id="errorMsg">⚠ Please enter a valid URL (e.g. https://example.com)</div>
+      <div class="error-msg" id="aliasError">⚠ That alias is already taken — try another.</div>
+
+      <div class="result-banner" id="resultBanner">
+        <div class="result-info">
+          <div class="result-label">Your shortened link</div>
+          <a class="result-link" id="resultLink" href="#" onclick="handleShortLinkClick(event,this)"></a>
+        </div>
+        <div class="result-actions">
+          <button class="btn-copy" id="copyBtn" onclick="copyResultLink()">Copy</button>
+          <button class="btn-qr-btn" onclick="openQRFromResult()">⬛ QR Code</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="stats-bar">
+      <div class="stat-chip"><div class="stat-num" id="totalLinks">0</div><div class="stat-lbl">Links Created</div></div>
+      <div class="stat-chip"><div class="stat-num" id="totalClicks">0</div><div class="stat-lbl">Total Clicks</div></div>
+      <div class="stat-chip"><div class="stat-num" id="topClicks">0</div><div class="stat-lbl">Most Clicked</div></div>
+    </div>
+
+    <div class="dashboard-header">
+      <div class="dashboard-title">📊 Your Links</div>
+      <button class="btn-clear" onclick="clearAll()">Clear All</button>
+    </div>
+    <div class="links-list" id="linksList"></div>
+    <div class="empty-state" id="emptyState">
+      <div class="empty-icon">🔗</div>
+      No links yet. Shorten one above!
+    </div>
+  </div>
+  <footer>built for vibeathon · sniplink · 2025</footer>
+</div>
+
+<script>
+  const STORE_KEY = 'sniplink_v2';
+  function loadLinks() { try { return JSON.parse(localStorage.getItem(STORE_KEY)) || []; } catch { return []; } }
+  function saveLinks(l) { localStorage.setItem(STORE_KEY, JSON.stringify(l)); }
+
+  function getCode() { const m = location.hash.match(/^#\/([a-zA-Z0-9\-_]+)$/); return m ? m[1] : null; }
+
+  function handleRedirect() {
+    const code = getCode();
+    if (!code) return false;
+    const links = loadLinks();
+    const entry = links.find(l => l.code === code);
+    if (!entry) return false;
+    entry.clicks++; entry.lastClicked = new Date().toISOString();
+    saveLinks(links);
+    document.getElementById('redirect-page').classList.add('active');
+    document.getElementById('main-app').style.display = 'none';
+    document.getElementById('redirect-dest').textContent = entry.original;
+    setTimeout(() => { window.location.href = entry.original; }, 1200);
+    return true;
+  }
+
+  function isValidUrl(s) { try { const u = new URL(s); return u.protocol === 'http:' || u.protocol === 'https:'; } catch { return false; } }
+
+  function genCode() {
+    const c = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+    return Array.from({length:6}, () => c[Math.floor(Math.random()*c.length)]).join('');
+  }
+  function uniqueCode(links) { const s = new Set(links.map(l=>l.code)); let c; do{c=genCode();}while(s.has(c)); return c; }
+
+  function shortenUrl() {
+    const input = document.getElementById('urlInput');
+    const aliasIn = document.getElementById('aliasInput');
+    const errMsg = document.getElementById('errorMsg');
+    const aliasErr = document.getElementById('aliasError');
+    errMsg.classList.remove('visible'); aliasErr.classList.remove('visible');
+    input.classList.remove('error'); aliasIn.classList.remove('error');
+
+    const raw = input.value.trim();
+    const url = (raw.startsWith('http://')||raw.startsWith('https://')) ? raw : 'https://'+raw;
+    const alias = aliasIn.value.trim();
+
+    if (!raw || !isValidUrl(url)) { input.classList.add('error'); errMsg.classList.add('visible'); return; }
+
+    const links = loadLinks();
+    if (alias && links.find(l => l.code === alias)) { aliasIn.classList.add('error'); aliasErr.classList.add('visible'); return; }
+
+    const code = alias || uniqueCode(links);
+    const shortUrl = location.origin + location.pathname + '#/' + code;
+
+    links.unshift({ code, original: url, short: shortUrl, clicks: 0, created: new Date().toISOString(), lastClicked: null, isCustom: !!alias });
+    saveLinks(links);
+
+    const rl = document.getElementById('resultLink');
+    rl.href = shortUrl; rl.textContent = shortUrl; rl.dataset.code = code;
+    document.getElementById('resultBanner').classList.add('visible');
+    document.getElementById('copyBtn').textContent = 'Copy';
+    document.getElementById('copyBtn').classList.remove('copied');
+    input.value = ''; aliasIn.value = '';
+    renderDashboard();
+  }
+
+  function copyResultLink() {
+    navigator.clipboard.writeText(document.getElementById('resultLink').textContent).then(() => {
+      const b = document.getElementById('copyBtn'); b.textContent = '✓ Copied!'; b.classList.add('copied');
+    });
+  }
+
+  function openQRFromResult() {
+    const url = document.getElementById('resultLink').textContent;
+    openQRModal(url);
+  }
+
+  function handleShortLinkClick(e, el) {
+    e.preventDefault();
+    if (!el.dataset.code) return;
+    location.hash = '/'+el.dataset.code;
+    location.reload();
+  }
+
+  function clearAll() {
+    if (!confirm('Delete all shortened links?')) return;
+    saveLinks([]);
+    document.getElementById('resultBanner').classList.remove('visible');
+    renderDashboard();
+  }
+
+  function deleteLink(code) {
+    saveLinks(loadLinks().filter(l => l.code !== code));
+    renderDashboard();
+  }
+
+  function copyCardLink(btn, url) {
+    navigator.clipboard.writeText(url).then(() => {
+      btn.textContent = '✓ copied'; btn.classList.add('copied-state');
+      setTimeout(() => { btn.textContent = '📋 copy'; btn.classList.remove('copied-state'); }, 1800);
+    });
+  }
+
+  /* QR CODE */
+  let _qrInstance = null;
+  function openQRModal(url) {
+    document.getElementById('qrModalUrl').textContent = url;
+    document.getElementById('qrContainer').innerHTML = '';
+    _qrInstance = new QRCode(document.getElementById('qrContainer'), {
+      text: url, width: 200, height: 200,
+      colorDark: '#0b0c0f', colorLight: '#ffffff',
+      correctLevel: QRCode.CorrectLevel.H
+    });
+    document.getElementById('qrModal').classList.add('active');
+  }
+
+  function closeQRModal() { document.getElementById('qrModal').classList.remove('active'); }
+
+  document.getElementById('qrModal').addEventListener('click', e => {
+    if (e.target === document.getElementById('qrModal')) closeQRModal();
+  });
+
+  document.addEventListener('keydown', e => { if (e.key === 'Escape') closeQRModal(); });
+
+  function downloadQR() {
+    const canvas = document.querySelector('#qrContainer canvas');
+    if (!canvas) return;
+    const a = document.createElement('a'); a.download = 'sniplink-qr.png'; a.href = canvas.toDataURL('image/png'); a.click();
+  }
+
+  /* RENDER */
+  function renderDashboard() {
+    const links = loadLinks();
+    const list = document.getElementById('linksList');
+    const empty = document.getElementById('emptyState');
+    const tc = links.reduce((s,l)=>s+l.clicks,0);
+    const top = links.length ? Math.max(...links.map(l=>l.clicks)) : 0;
+    document.getElementById('totalLinks').textContent = links.length;
+    document.getElementById('totalClicks').textContent = tc;
+    document.getElementById('topClicks').textContent = top;
+
+    if (!links.length) { list.innerHTML=''; empty.classList.add('visible'); return; }
+    empty.classList.remove('visible');
+
+    list.innerHTML = links.map(l => {
+      const date = new Date(l.created).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});
+      const lastClick = l.lastClicked ? ' · Last clicked ' + new Date(l.lastClicked).toLocaleDateString('en-US',{month:'short',day:'numeric'}) : '';
+      const customBadge = l.isCustom ? `<span style="color:var(--accent);font-size:10px;margin-left:6px;">✦ custom</span>` : '';
+      return `<div class="link-card">
+        <div class="link-card-top">
+          <div>
+            <div class="link-original" title="${esc(l.original)}">${esc(l.original)}</div>
+            <a class="link-short" href="${esc(l.short)}" data-code="${l.code}" onclick="handleShortLinkClick(event,this)">${esc(l.short)}</a>${customBadge}
+            <div class="link-meta">Created ${date}${lastClick}</div>
+          </div>
+          <div class="click-badge">
+            <div class="click-count" id="cnt-${l.code}">${l.clicks}</div>
+            <div class="click-label">clicks</div>
+          </div>
+        </div>
+        <div class="link-card-actions">
+          <button class="btn-card" onclick="copyCardLink(this,'${esc(l.short)}')">📋 copy</button>
+          <button class="btn-card" onclick="openQRModal('${esc(l.short)}')">⬛ qr code</button>
+          <button class="btn-card btn-del" onclick="deleteLink('${l.code}')">🗑 delete</button>
+        </div>
+      </div>`;
+    }).join('');
+  }
+
+  function esc(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;'); }
+
+  document.getElementById('urlInput').addEventListener('keydown', e => { if(e.key==='Enter') shortenUrl(); });
+  document.getElementById('aliasInput').addEventListener('keydown', e => { if(e.key==='Enter') shortenUrl(); });
+
+  if (!handleRedirect()) renderDashboard();
+</script>
+</body>
+</html>
